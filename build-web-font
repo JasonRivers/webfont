@@ -1,0 +1,131 @@
+#!/bin/bash
+
+set -e
+
+## Font location
+FONT=$1
+
+
+DEV_DIR=/tmp
+
+## checks
+
+echo -n -e "Checking for ttf2eot..."
+if [ `which ttf2eot` ]; then
+        echo -n -e "\e[32mOK\e[39m.\n"
+        TTF2EOT=`which ttf2eot`
+else
+        echo -e "\n\e[31mERROR: ttf2eot not found...\e[39m"
+	echo "Would you like to install ttf2eot?"
+	read yn
+	case $yn in
+		y|Y|yes|YES|Yes)
+			echo "Installing ttf2eot"
+			cd ${DEV_DIR}
+			git clone https://github.com/JasonRivers/ttf2eot.git
+
+			cd ${DEV_DIR}/ttf2eot
+			make
+			sudo make install
+			make clean
+			cd ${DEV_DIR}
+			rm -Rf ttf2eot
+		
+			;;
+		*)
+			echo -e "\n\e[31mERROR: ttf2eot required to continue.\e[39m"
+			exit 1
+			;;
+	esac
+fi
+echo -n -e "Checking for sfnt2woff..."
+if [ `which sfnt2woff` ]; then
+        echo -n -e "\e[32mOK\e[39m.\n"
+        SFNT2WOFF=`which sfnt2woff`
+else
+        echo -e "\n\e[31mERROR: sfnt2woff not found...\e[39m"
+	echo "Would you like to install sfnt2woff?"
+	read yn
+	case $yn in
+		y|Y|yes|YES|Yes)
+			cd ${DEV_DIR}
+			wget http://people.mozilla.org/~jkew/woff/woff-code-latest.zip
+			mkdir -p ${DEV_DIR}/sfnt2woff
+			unzip ${DEV_DIR}/woff-code-latest.zip -d ${DEV_DIR}/sfnt2woff
+			rm ${DEV_DIR}/woff-code-latest.zip
+
+			cd ${DEV_DIR}/sfnt2woff
+			make
+			sudo cp sfnt2woff /usr/local/bin/
+			sudo cp woff2sfnt /usr/local/bin/
+			make clean
+			cd ${DEV_DIR}
+			rm -Rf sfnt2woff
+			;;
+		*)
+			echo -e "\n\e[31mERROR: sfnt2woff required to continue.\e[39m"
+			exit 1
+			;;
+	esac
+
+fi
+echo -n -e "Checking for Fontforge..."
+if [ `which fontforge` ]; then
+        echo -n -e "\e[32mOK\e[39m.\n"
+        FONTFORGE=`which fontforge`
+else
+        echo "ERROR: fontforge not found..."
+        exit 1
+fi
+echo -n -e "Checking for ttf2svg..."
+if [ `which ttf2svg` ]; then
+        echo -n -e "\e[32mOK\e[39m.\n"
+        TTF2SVG=`which ttf2svg`
+else
+        echo "ERROR: ttf2svg not found..."
+	echo "Would you like to install ttf2svg?"
+	read yn
+	case $yn in
+		y|Y|yes|YES|Yes)
+
+			cat >ttf2svg <<-!!EOF
+			#!${FONTFORGE}
+			Open(\$1)
+			Generate(\$1:r + ".svg")
+
+			!!EOF
+			chmod +x ttf2svg
+			sudo mv ttf2svg /usr/local/bin/
+			;;
+		*)
+		
+			echo -e "\n\e[31mERROR: ttf2svg required to continue.\e[39m"
+			exit 1
+			;;
+	esac
+fi
+
+echo -n "--- BUILDING ---"
+
+TTFFONT=`basename $FONT`
+EOTFONT=`echo $TTFFONT | sed -e 's/\.ttf/\.eot/i'`
+WOFFFONT=`echo $TTFFONT | sed -e 's/\.ttf/\.woff/i'`
+SVGFONT=`echo $TTFFONT | sed -e 's/\.ttf/\.svg/i'`
+
+	cd `dirname $FONT`
+        ## Convert to EOT
+	echo -n -e "\nCreating ${EOTFONT}..."
+        $TTF2EOT < $TTFFONT > $EOTFONT 2>/dev/null || { echo -n -e "\e[31mFailed.\e[39m" ; exit 1 ; }
+        echo -n -e "\e[32mOK\e[39m.\n"
+        ## Convert to WOFF
+        echo -n -e "Creating ${WOFFFONT}..."
+        $SFNT2WOFF ${TTFFONT} 2>/dev/null || { echo -n -e "\e[31mFailed.\e[39m" ; exit 1 ; }
+        echo -n -e "\e[32mOK\e[39m.\n"
+        ## Convert to SVG
+        echo -n -e "Creating ${SVGFONT}..."
+        export FONTFORGE_LANGUAGE=ff
+        $TTF2SVG ${TTFFONT} 2>/dev/null || { echo -n -e "\e[31mFailed.\e[39m" ; exit 1 ; }
+        echo -n -e "\e[32mOK\e[39m.\n"
+
+
+echo "Finished."
